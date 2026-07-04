@@ -1,0 +1,42 @@
+# ==========================================
+# Core Terraform Working Directories & Logs
+# ==========================================
+# Local .terraform directory contains downloaded plugins, modules, and providers
+**/.terraform/*
+
+# Crash log files generated if a command fails unexpectedly
+crash.log
+crash.*.log
+
+# ==========================================
+# Terraform State Files (DO NOT COMMIT SECRETS)
+# ==========================================
+# Local state files contain infrastructure details and sensitive plain-text data
+*.tfstate
+*.tfstate.*
+
+# Exclude transient lock files used during active runs
+.terraform.tfstate.lock.info
+
+# ==========================================
+# Variables and Secrets (Vary per environment)
+# ==========================================
+# Exclude files containing sensitive backend configurations or variables
+*.tfvars
+*.tfvars.json
+
+# ==========================================
+# Local Overrides & CLI Configurations
+# ==========================================
+# Ignore development overrides that shouldn't impact team configurations
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Include a specific override file if strictly required by your workflow
+#!example_override.tf
+
+# Ignore local CLI configuration files
+.terraformrc
+terraform.rc
