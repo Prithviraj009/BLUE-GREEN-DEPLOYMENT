@@ -15,14 +15,12 @@ pipeline {
 
     stages {
 
-        stage('Checkout') {
-            steps {
-                git branch: 'master', url: 'https://github.com/Prithviraj009/BLUE-GREEN-DEPLOYMENT.git'
-            }
-        }
+      
+        //we used dir as dockerfile is in app folder so it executes the command in app dir
 
-        stage('Build Image') {
-            steps {
+       stage('Build Image') {
+        steps {
+            dir('app') {
                 script {
                     withDockerRegistry(credentialsId: 'docker-cred') {
                         sh "docker build -t ${IMAGE_NAME}:${TAG} ."
@@ -30,12 +28,13 @@ pipeline {
                 }
             }
         }
+}
 
         stage('Push Image') {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker-cred') {
-                        sh "docker push ${IMAGE_NAME}:${TAG}"
+                        sh "docker build -t ${IMAGE_NAME}:${TAG} -f app/Dockerfile app"
                     }
                 }
             }
