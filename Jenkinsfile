@@ -11,30 +11,31 @@ pipeline {
         IMAGE_NAME     = "snowman0000/bg-deployment"
         TAG            = "${params.DOCKER_TAG}"
         KUBE_NAMESPACE = 'webapps'
+        AWS_CRED_ID    = 'aws-cred-admin'
+        KUBE_CRED_ID   = 'k8-token'
     }
 
     stages {
 
-      
-        //we used dir as dockerfile is in app folder so it executes the command in app dir
-
-       stage('Build Image') {
-        steps {
-            dir('app') {
+        stage('Validate Params') {
+            steps {
                 script {
-                    withDockerRegistry(credentialsId: 'docker-cred') {
-                        sh "docker build -t ${IMAGE_NAME}:${TAG} ."
+                    if (params.DEPLOY_ENV != params.DOCKER_TAG) {
+                        error "DEPLOY_ENV (${params.DEPLOY_ENV}) and DOCKER_TAG (${params.DOCKER_TAG}) must match"
                     }
                 }
             }
         }
-}
 
-        stage('Push Image') {
+        // we use dir() as the Dockerfile is in the app folder, so it runs docker build in app dir
+        stage('Build & Push Image') {
             steps {
-                script {
-                    withDockerRegistry(credentialsId: 'docker-cred') {
-                        sh "docker build -t ${IMAGE_NAME}:${TAG} -f app/Dockerfile app"
+                dir('app') {
+                    script {
+                        withDockerRegistry(credentialsId: 'docker-cred') {
+                            sh "docker build -t ${IMAGE_NAME}:${TAG} ."
+                            sh "docker push ${IMAGE_NAME}:${TAG}"
+                        }
                     }
                 }
             }
@@ -45,15 +46,17 @@ pipeline {
                 script {
                     def deploymentManifest = "kubernetes/deployment/${params.DEPLOY_ENV}-deployment.yaml"
 
-                    withKubeConfig(credentialsId: 'k8-token', namespace: "${KUBE_NAMESPACE}") {
-                        sh """
-                            kubectl create namespace ${KUBE_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
-                            kubectl apply -f kubernetes/services/service-bg-active.yaml -f kubernetes/services/service-bg-preview.yaml -n ${KUBE_NAMESPACE}
-                            kubectl apply -f ${deploymentManifest} -n ${KUBE_NAMESPACE}
-                            kubectl set image deployment/deployment-${params.DEPLOY_ENV} app=${IMAGE_NAME}:${TAG} -n ${KUBE_NAMESPACE}
-                            kubectl rollout status deployment/deployment-${params.DEPLOY_ENV} -n ${KUBE_NAMESPACE} --timeout=180s
-                            kubectl patch service service-bg-preview -n ${KUBE_NAMESPACE} --type merge -p '{"spec":{"selector":{"app":"bg-app","version":"${params.DEPLOY_ENV}"}}}'
-                        """
+                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: "${AWS_CRED_ID}"]]) {
+                        withKubeConfig(credentialsId: "${KUBE_CRED_ID}", namespace: "${KUBE_NAMESPACE}") {
+                            sh """
+                                kubectl create namespace ${KUBE_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+                                kubectl apply -f kubernetes/services/service-bg-active.yaml -f kubernetes/services/service-bg-preview.yaml -n ${KUBE_NAMESPACE}
+                                kubectl apply -f ${deploymentManifest} -n ${KUBE_NAMESPACE}
+                                kubectl set image deployment/deployment-${params.DEPLOY_ENV} app=${IMAGE_NAME}:${TAG} -n ${KUBE_NAMESPACE}
+                                kubectl rollout status deployment/deployment-${params.DEPLOY_ENV} -n ${KUBE_NAMESPACE} --timeout=180s
+                                kubectl patch service service-bg-preview -n ${KUBE_NAMESPACE} --type merge -p '{"spec":{"selector":{"app":"bg-app","version":"${params.DEPLOY_ENV}"}}}'
+                            """
+                        }
                     }
                 }
             }
@@ -61,14 +64,16 @@ pipeline {
 
         stage('Smoke Test') {
             steps {
-                withKubeConfig(credentialsId: 'k8-token', namespace: "${KUBE_NAMESPACE}") {
-                    sh """
-                        kubectl port-forward svc/service-bg-preview 18080:80 -n ${KUBE_NAMESPACE} &
-                        PF_PID=\$!
-                        sleep 5
-                        curl -f http://localhost:18080/health || (kill \$PF_PID && exit 1)
-                        kill \$PF_PID
-                    """
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: "${AWS_CRED_ID}"]]) {
+                    withKubeConfig(credentialsId: "${KUBE_CRED_ID}", namespace: "${KUBE_NAMESPACE}") {
+                        sh """
+                            kubectl port-forward svc/service-bg-preview 18080:80 -n ${KUBE_NAMESPACE} &
+                            PF_PID=\$!
+                            trap 'kill \$PF_PID 2>/dev/null || true' EXIT
+                            sleep 5
+                            curl -f http://localhost:18080/health
+                        """
+                    }
                 }
             }
         }
@@ -78,10 +83,12 @@ pipeline {
                 expression { return params.SWITCH_TRAFFIC }
             }
             steps {
-                withKubeConfig(credentialsId: 'k8-token', namespace: "${KUBE_NAMESPACE}") {
-                    sh """
-                        kubectl patch service service-bg-active -n ${KUBE_NAMESPACE} --type merge -p '{"spec":{"selector":{"app":"bg-app","version":"${params.DEPLOY_ENV}"}}}'
-                    """
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: "${AWS_CRED_ID}"]]) {
+                    withKubeConfig(credentialsId: "${KUBE_CRED_ID}", namespace: "${KUBE_NAMESPACE}") {
+                        sh """
+                            kubectl patch service service-bg-active -n ${KUBE_NAMESPACE} --type merge -p '{"spec":{"selector":{"app":"bg-app","version":"${params.DEPLOY_ENV}"}}}'
+                        """
+                    }
                 }
                 echo "Traffic switched to ${params.DEPLOY_ENV}"
             }
