@@ -63,21 +63,18 @@ pipeline {
         }
 
         stage('Smoke Test') {
-            steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: "${AWS_CRED_ID}"]]) {
-                    withKubeConfig(credentialsId: "${KUBE_CRED_ID}", namespace: "${KUBE_NAMESPACE}") {
-                        sh """
-                            kubectl port-forward svc/service-bg-preview 18080:80 -n ${KUBE_NAMESPACE} &
-                            PF_PID=\$!
-                            trap 'kill \$PF_PID 2>/dev/null || true' EXIT
-                            sleep 5
-                            curl -f http://localhost:18080/health
-                        """
-                    }
+        steps {
+            withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: "${AWS_CRED_ID}"]]) {
+                withKubeConfig(credentialsId: "${KUBE_CRED_ID}", namespace: "${KUBE_NAMESPACE}") {
+                    sh """
+                        kubectl run smoke-test-${BUILD_NUMBER} --rm -i --restart=Never \\
+                        --image=curlimages/curl -n ${KUBE_NAMESPACE} \\
+                        -- curl -f http://service-bg-preview.${KUBE_NAMESPACE}.svc.cluster.local/health
+                    """
                 }
             }
         }
-
+}
         stage('Switch Traffic') {
             when {
                 expression { return params.SWITCH_TRAFFIC }
