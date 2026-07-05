@@ -3,32 +3,35 @@ kind: Deployment
 metadata:
   name: deployment-blue
   labels:
-    app: service-blue
+    app: bg-app
+    version: blue
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: service-blue
+      app: bg-app
+      version: blue
   template:
     metadata:
       labels:
-        app: service-blue
+        app: bg-app
+        version: blue
     spec:
       containers:
-        - name: service-blue
-          image: snowman0000/bg-deployment:latest
-          imagePullPolicy: IfNotPresent
+        - name: app
+          image: snowman0000/bg-deployment:blue
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           readinessProbe:
             httpGet:
-              path: /
+              path: /health
               port: 8080
             initialDelaySeconds: 5
-            periodSeconds: 5
+            periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /
+              path: /health
               port: 8080
-            initialDelaySeconds: 10
-            periodSeconds: 10
+            initialDelaySeconds: 15
+            periodSeconds: 20
