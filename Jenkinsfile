@@ -17,7 +17,7 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/Prithviraj009/Blue-Green-Deployment.git'
+                git branch: 'master', url: 'https://github.com/Prithviraj009/BLUE-GREEN-DEPLOYMENT.git'
             }
         }
 
